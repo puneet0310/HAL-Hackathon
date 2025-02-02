@@ -14,7 +14,7 @@ const Healthcare = () => {
   const [patientRecords, setPatientRecords] = useState([]);
   const [providerAddress, setProviderAddress] = useState("");
   const [balance, setBalance] = useState(null);
-  const contractAddress = "0xc16Bc87D0E3Df0AACf27CeeC241f2dA9fA25C008";
+  const contractAddress = "0x5a93Ce1278bAA8f6853E0e35ABB63fd438129837";
 
   const contractABI = [
     {
@@ -55,7 +55,7 @@ const Healthcare = () => {
             { internalType: "string", name: "treatment", type: "string" },
             { internalType: "uint256", name: "timestamp", type: "uint256" },
           ],
-          internalType: "struct HealthcareRecords.Record[]",
+          internalType: "tuple[]",
           name: "",
           type: "tuple[]",
         },
@@ -65,25 +65,26 @@ const Healthcare = () => {
     },
   ];
 
-  // Button handler for connecting MetaMask
   const btnhandler = () => {
     if (window.ethereum) {
       window.ethereum
         .request({ method: "eth_requestAccounts" })
-        .then((res) => accountChangeHandler(res[0]));
+        .then((res) => accountChangeHandler(res[0]))
+        .catch((err) => {
+          alert("Error connecting to MetaMask.");
+          console.error(err);
+        });
     } else {
       alert("Please install MetaMask.");
     }
   };
 
-  // Handle account change and fetch balance
   const accountChangeHandler = (account) => {
     setAccount(account);
     getbalance(account);
     fetchContractDetails(account);
   };
 
-  // Get the balance of the connected account
   const getbalance = (address) => {
     window.ethereum
       .request({
@@ -92,10 +93,13 @@ const Healthcare = () => {
       })
       .then((balance) => {
         setBalance(ethers.utils.formatEther(balance));
+      })
+      .catch((err) => {
+        console.error("Error fetching balance:", err);
+        setBalance(null);
       });
   };
 
-  // Fetch contract details like owner
   const fetchContractDetails = async (accountAddress) => {
     try {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -107,64 +111,59 @@ const Healthcare = () => {
       );
       setContract(contractInstance);
 
-      // Fetch contract owner
-      const ownerAddress = await contractInstance.getOwner();
+      // Fetch contract owner using hardcoded address for debugging
+      const ownerAddress = "0xYourOwnerAddressHere"; // Hardcode your owner's address for debugging.
       setIsOwner(accountAddress.toLowerCase() === ownerAddress.toLowerCase());
     } catch (error) {
       console.error("Error fetching contract details:", error);
-      // Show specific error message to the user
-      if (error.code === "CALL_EXCEPTION") {
-        alert(
-          "Error calling getOwner: The contract may be misconfigured or inaccessible."
-        );
-      } else {
-        alert(`Error fetching contract details: ${error.message}`);
-      }
+      alert(
+        "Error calling getOwner: The contract may be misconfigured or inaccessible."
+      );
     }
   };
 
-  // Fetch patient records
+  // Fetch Patient Records
   const fetchPatientRecords = async () => {
+    if (!contract || !patientID) {
+      alert("Please connect to the contract and enter a valid patient ID.");
+      return;
+    }
+
     try {
       const records = await contract.getPatientRecords(patientID);
       setPatientRecords(records);
     } catch (error) {
       console.error("Error fetching patient records:", error);
-      alert("Error fetching patient records. Please try again.");
     }
   };
 
-  // Add a new record to the contract
+  // Add Record
   const addRecord = async () => {
+    if (!contract || !diagnosis || !treatment || !patientID) {
+      alert("Please fill in all the fields.");
+      return;
+    }
+
     try {
-      const tx = await contract.addRecord(
-        patientID,
-        "Alice",
-        diagnosis,
-        treatment
-      );
-      await tx.wait();
-      fetchPatientRecords();
-      alert("Record added successfully.");
+      await contract.addRecord(patientID, account, diagnosis, treatment);
+      alert("Record added successfully!");
     } catch (error) {
       console.error("Error adding record:", error);
-      alert("Error adding record. Please try again.");
     }
   };
 
-  // Authorize a healthcare provider
+  // Authorize Provider
   const authorizeProvider = async () => {
-    if (isOwner) {
-      try {
-        const tx = await contract.authorizeProvider(providerAddress);
-        await tx.wait();
-        alert(`Provider ${providerAddress} authorized successfully.`);
-      } catch (error) {
-        console.error("Error authorizing provider:", error);
-        alert("Error authorizing provider. Please try again.");
-      }
-    } else {
-      alert("Only contract owner can authorize providers.");
+    if (!contract || !providerAddress) {
+      alert("Please provide a valid provider address.");
+      return;
+    }
+
+    try {
+      await contract.authorizeProvider(providerAddress);
+      alert("Provider authorized successfully!");
+    } catch (error) {
+      console.error("Error authorizing provider:", error);
     }
   };
 
@@ -235,27 +234,6 @@ const Healthcare = () => {
             <button className="action-button" onClick={authorizeProvider}>
               Authorize Provider
             </button>
-          </div>
-
-          <div className="records-section">
-            <h2>Patient Records</h2>
-            {patientRecords.length > 0 ? (
-              patientRecords.map((record, index) => (
-                <div key={index}>
-                  <p>Record ID: {record.recordID.toNumber()}</p>
-                  <p>Diagnosis: {record.diagnosis}</p>
-                  <p>Treatment: {record.treatment}</p>
-                  <p>
-                    Timestamp:{" "}
-                    {new Date(
-                      record.timestamp.toNumber() * 1000
-                    ).toLocaleString()}
-                  </p>
-                </div>
-              ))
-            ) : (
-              <p>No records found for this patient.</p>
-            )}
           </div>
         </>
       )}
